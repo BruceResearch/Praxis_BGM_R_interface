@@ -57,6 +57,9 @@ pip install git+https://github.com/ContiLab-usc/Praxis-BGM.git
 - scikit-learn
 - matplotlib
 
+### R requirements 
+- reticulate 
+ 
 ## 2) Use the R wrapper
 
 Source the wrapper script in R. The script uses:
@@ -64,6 +67,7 @@ Source the wrapper script in R. The script uses:
 ```r
 library(reticulate)
 use_condaenv("jax_env")
+source("R/praxis_bgm_fit.R")
 ```
 
 Then call the wrapper function:
