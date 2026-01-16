@@ -7,7 +7,7 @@ tutorial (`Praxis_R_Turtorial.Rmd`).
 
 ## About Praxis-BGM (Python/JAX)
 
-The original Praxis-BGM implementation is available at:
+The original Praxis-BGM Python implementation is available at:
 https://github.com/ContiLab-usc/Praxis-BGM
 
 Praxis-BGM (Prior-Augmented Bayesian Gaussian Mixture Model via Natural-Gradient Variational
@@ -32,25 +32,23 @@ implemented in **JAX** for GPU/TPU acceleration and numerically stable updates.
 ## Prerequisites
 
 - R (with the **reticulate** package installed).
-- A working Python environment that can run Praxis-BGM and JAX.
+- A working Python environment (conda) that can run Praxis-BGM and JAX.
 
 ## 1) Install Praxis-BGM and dependencies (Python)
 
 > **Important:** Install the Python package **before** calling the R wrapper.
 
-Create a conda environment (example name: `jax_env`) and install requirements. Adjust to
+Create a conda environment (example name: `jax_env`) and install requirements including the Python version of Praxis-BGM as a dependency. Adjust to
 match your Praxis-BGM installation instructions.
 
 ```bash
 conda create -n jax_env python=3.10 -y
 conda activate jax_env
-pip install praxis_bgm jax jaxlib numpy
+pip install jax jaxlib numpy
+pip install git+https://github.com/ContiLab-usc/Praxis-BGM.git
 ```
 
-If Praxis-BGM is installed from source, follow the upstream installation guide and ensure
-it is available in the same conda environment used by reticulate.
-
-### Python requirements (reference)
+### Python requirements 
 
 - python >= 3.9
 - jax >= 0.4.20
@@ -58,9 +56,6 @@ it is available in the same conda environment used by reticulate.
 - numpy
 - scikit-learn
 - matplotlib
-
-For GPU acceleration, install the appropriate jaxlib build from:
-https://github.com/google/jax#installation
 
 ## 2) Use the R wrapper
 
