@@ -1,4 +1,5 @@
 export(generate_overlapping_gmm_samples)
 export(l2_norm_with_alignment)
+export(praxis_bgm_bf_selection)
 export(praxis_bgm_fit)
 export(randomly_shift_means)
