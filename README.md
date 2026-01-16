@@ -2,7 +2,7 @@
 
 An R wrapper around the Python Praxis-BGM package using **reticulate**. This repo provides
 an R script (`Praxis_R_Wrapper.R`) that loads a conda environment and exposes a convenient
-`praxis_bgm_fit()` helper, plus an R Markdown tutorial (`Praxis_R_Wrapper.Rmd`).
+`praxis_bgm_fit()` helper, plus an R Markdown tutorial (`Praxis_R_Turtorial.Rmd`).
 
 ## Prerequisites
 
@@ -48,13 +48,13 @@ Returned elements include posterior parameters, responsibilities, and the model 
 
 ## Tutorial
 
-`Praxis_R_Wrapper.Rmd` is an end-to-end tutorial that sources the R script, simulates
+`Praxis_R_Turtorial.Rmd` is an end-to-end tutorial that sources the R script, simulates
 Gaussian-mixture data, fits Praxis-BGM, and inspects outputs.
 
 ## Files
 
 - `Praxis_R_Wrapper.R`: R script that defines `praxis_bgm_fit()` for use with reticulate.
-- `Praxis_R_Wrapper.Rmd`: Tutorial that sources the R script and demonstrates fitting.
+- `Praxis_R_Turtorial.Rmd`: Tutorial that sources the R script and demonstrates fitting.
 
 ## Notes
 
