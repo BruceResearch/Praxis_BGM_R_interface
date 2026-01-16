@@ -16,6 +16,7 @@ Python tutorial workflow in R, including simulation, baselines, and Praxis-BGM f
 
 ```{r setup, include=FALSE}
 source("R/praxis_bgm_fit.R")
+source("R/praxis_bgm_bf_selection.R")
 source("R/praxis_simulation.R")
 library(reticulate)
 library(MASS)
@@ -198,4 +199,18 @@ cat("=== SUMMARY ===\n")
 cat(sprintf("ARI NGVI (with transferred priors): %.3f\n", ari_prior))
 cat(sprintf("ARI NGVI (no priors):             %.3f\n", ari_noprior))
 cat(sprintf("[TARGET] ARI QDA (source-trained, supervised): %.3f\n", ari_qda))
+```
+
+## Bayes factor feature selection
+
+```{r bf-selection}
+bf_results <- praxis_bgm_bf_selection(
+  model = result_prior,
+  data = X_tgt,
+  top_n = 10,
+  visual = FALSE
+)
+
+cat("Top features:", bf_results$top_features, "\n")
+print(lapply(bf_results$classification, length))
 ```
