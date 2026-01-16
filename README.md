@@ -41,7 +41,7 @@ match your Praxis-BGM installation instructions.
 ```bash
 conda create -n jax_env python=3.10 -y
 conda activate jax_env
-pip install jax jaxlib numpy
+pip install jax jaxlib numpy scikit-learn matplotlib
 pip install git+https://github.com/ContiLab-usc/Praxis-BGM.git
 ```
 
