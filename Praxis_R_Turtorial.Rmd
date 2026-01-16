@@ -1,0 +1,201 @@
+---
+title: "Praxis_R_Turtorial"
+author: "Qiran Jia"
+date: "2025-10-01"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+## Overview
+
+This tutorial shows how to source the `R/praxis_bgm_fit.R` script and reproduce the
+Python tutorial workflow in R, including simulation, baselines, and Praxis-BGM fitting.
+
+## Setup
+
+```{r setup, include=FALSE}
+source("R/praxis_bgm_fit.R")
+source("R/praxis_simulation.R")
+library(reticulate)
+library(MASS)
+library(mclust)
+library(proxy)
+library(clue)
+
+np <- import("numpy", delay_load = TRUE)
+```
+
+If these R packages are missing, install them first:
+
+```{r install-packages, eval=FALSE}
+install.packages(c("MASS", "mclust", "proxy", "clue"))
+```
+
+## Simulate SOURCE data
+
+```{r source-sim}
+K <- 4
+P <- 100
+C <- 40
+N_src <- 800
+
+source_data <- generate_overlapping_gmm_samples(
+  n_components = K,
+  n_causal = C,
+  n_features = P,
+  n_samples = N_src,
+  random_seed = 123
+)
+
+X_src <- source_data$samples
+y_src <- source_data$labels
+true_means_src <- source_data$full_means
+
+cat("X_src shape:", dim(X_src), "\n")
+cat("True means (source) shape:", dim(true_means_src), "\n")
+```
+
+## Learning priors from SOURCE
+
+```{r source-priors}
+mus_post_src <- do.call(
+  rbind,
+  lapply(seq_len(K), function(k) {
+    Xk <- X_src[y_src == (k - 1L), , drop = FALSE]
+    if (nrow(Xk) == 0) {
+      stop(sprintf("No samples for cluster %d in source data!", k))
+    }
+    colMeans(Xk)
+  })
+)
+
+pis_src_emp <- as.numeric(table(factor(y_src, levels = 0:(K - 1L)))) / length(y_src)
+
+cat("Empirical SOURCE π:", round(pis_src_emp, 3), "\n")
+cat("Empirical SOURCE means shape:", dim(mus_post_src), "\n")
+```
+
+## QDA baseline trained on SOURCE
+
+```{r qda-source}
+qda <- MASS::qda(X_src, grouping = as.factor(y_src))
+cat("QDA fitted on SOURCE.\n")
+```
+
+## Simulate TARGET data (domain shift)
+
+```{r target-sim}
+N_tgt <- 200
+mean_shift_tgt <- 0.3
+shift_percentage <- 0.3
+
+true_means_tgt <- randomly_shift_means(
+  true_means_src,
+  shift_magnitude = mean_shift_tgt,
+  percentage = shift_percentage,
+  random_seed = 999
+)
+
+set.seed(999)
+samples_per_component_tgt <- N_tgt %/% K
+
+X_tgt_list <- vector("list", K)
+y_tgt_list <- vector("list", K)
+for (k in seq_len(K)) {
+  causal_tgt <- MASS::mvrnorm(
+    samples_per_component_tgt,
+    true_means_tgt[k, seq_len(C)],
+    diag(C)
+  )
+  non_causal_tgt <- matrix(
+    rnorm(samples_per_component_tgt * (P - C)),
+    ncol = P - C
+  )
+  X_tgt_list[[k]] <- cbind(causal_tgt, non_causal_tgt)
+  y_tgt_list[[k]] <- rep(k - 1L, samples_per_component_tgt)
+}
+
+X_tgt <- do.call(rbind, X_tgt_list)
+y_tgt <- unlist(y_tgt_list)
+
+cat("X_tgt shape:", dim(X_tgt), "\n")
+cat("True means (target) shape:", dim(true_means_tgt), "\n")
+```
+
+## QDA baseline on TARGET
+
+```{r qda-target}
+qda_preds <- predict(qda, X_tgt)$class
+ari_qda <- mclust::adjustedRandIndex(y_tgt, as.integer(as.character(qda_preds)))
+cat(sprintf("[TARGET] ARI QDA (source-trained, supervised): %.3f\n", ari_qda))
+```
+
+## TARGET: Praxis-BGM with transferred priors
+
+```{r praxis-priors}
+result_prior <- praxis_bgm_fit(
+  data = X_tgt,
+  K = K,
+  seed = 123,
+  prior_mus = mus_post_src,
+  prior_pis = NULL,
+  beta = 1e-4,
+  tol = 1e-4,
+  max_iters = 300,
+  verbose = TRUE,
+  prior_mus_variance = 1.5,
+  num_samples = 64,
+  enforce_mask = FALSE,
+  mask_space = "precision",
+  spd_eps = 1e-6,
+  num_iters = 120,
+  batch_size = 64,
+  early_stop = TRUE,
+  patience = 5
+)
+
+pred_prior <- result_prior$model$predict(np$array(X_tgt, dtype = "float32"))
+yhat_prior <- reticulate::py_to_r(pred_prior[[1]])
+ari_prior <- mclust::adjustedRandIndex(y_tgt, yhat_prior)
+cat(sprintf("[TARGET] ARI with transferred priors: %.3f\n", ari_prior))
+```
+
+## TARGET: Praxis-BGM without priors (baseline)
+
+```{r praxis-noprior}
+result_noprior <- praxis_bgm_fit(
+  data = X_tgt,
+  K = K,
+  seed = 123,
+  prior_mus = NULL,
+  prior_Sigmas = NULL,
+  beta = 1e-3,
+  tol = 1e-4,
+  max_iters = 300,
+  verbose = TRUE,
+  prior_mus_variance = 10.0,
+  num_samples = 64,
+  enforce_mask = FALSE,
+  mask_space = "precision",
+  spd_eps = 1e-6,
+  num_iters = 120,
+  batch_size = 64,
+  early_stop = TRUE,
+  patience = 5
+)
+
+pred_noprior <- result_noprior$model$predict(np$array(X_tgt, dtype = "float32"))
+yhat_noprior <- reticulate::py_to_r(pred_noprior[[1]])
+ari_noprior <- mclust::adjustedRandIndex(y_tgt, yhat_noprior)
+cat(sprintf("[TARGET] ARI without priors: %.3f\n", ari_noprior))
+```
+
+## Final comparison
+
+```{r summary}
+cat("=== SUMMARY ===\n")
+cat(sprintf("ARI NGVI (with transferred priors): %.3f\n", ari_prior))
+cat(sprintf("ARI NGVI (no priors):             %.3f\n", ari_noprior))
+cat(sprintf("[TARGET] ARI QDA (source-trained, supervised): %.3f\n", ari_qda))
+```
