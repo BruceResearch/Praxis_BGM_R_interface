@@ -217,6 +217,7 @@ if (reticulate::is_py_object(topf) || is.environment(topf)) {
   topf <- reticulate::py_to_r(topf)
 }
 
+topf <- as.integer(unlist(topf))
 print(topf)
 
 causal_features <- 0:(C - 1L)
