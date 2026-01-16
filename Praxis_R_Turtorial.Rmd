@@ -207,10 +207,19 @@ cat(sprintf("[TARGET] ARI QDA (source-trained, supervised): %.3f\n", ari_qda))
 bf_results <- praxis_bgm_bf_selection(
   model = result_prior,
   data = X_tgt,
-  top_n = 10,
+  top_n = 40,
   visual = FALSE
 )
 
-cat("Top features:", bf_results$top_features, "\n")
-print(lapply(bf_results$classification, length))
+topf <- bf_results$top_features
+
+if (reticulate::is_py_object(topf) || is.environment(topf)) {
+  topf <- reticulate::py_to_r(topf)
+}
+
+print(topf)
+
+causal_features <- 0:(C - 1L)
+overlap_count <- length(intersect(topf, causal_features))
+cat("Top 40 overlap with causal features:", overlap_count, "\n")
 ```
