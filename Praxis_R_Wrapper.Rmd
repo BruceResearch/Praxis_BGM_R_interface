@@ -1,0 +1,61 @@
+---
+title: "Praxis_R_Wrapper_Tutorial"
+author: "Qiran Jia"
+date: "2025-10-01"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+## Overview
+
+This tutorial shows how to source the `Praxis_R_Wrapper.R` script, simulate data, and
+run the `praxis_bgm_fit()` function as a normal R function.
+
+## Setup
+
+```{r setup, include=FALSE}
+source("Praxis_R_Wrapper.R")
+```
+
+## Simulate data (Gaussian mixture)
+
+```{r simulation}
+set.seed(123)
+
+n_per_cluster <- 200
+means <- list(c(2, 2), c(-2, -1), c(3, -3))
+covs <- list(
+  matrix(c(1.0, 0.3, 0.3, 0.8), nrow = 2),
+  matrix(c(0.7, -0.2, -0.2, 0.5), nrow = 2),
+  matrix(c(1.2, 0.1, 0.1, 0.6), nrow = 2)
+)
+
+simulate_cluster <- function(mu, Sigma, n) {
+  eig <- eigen(Sigma)
+  z <- matrix(rnorm(n * length(mu)), ncol = length(mu))
+  sweep(z %*% diag(sqrt(eig$values)) %*% t(eig$vectors), 2, mu, "+")
+}
+
+data_list <- Map(simulate_cluster, means, covs, n_per_cluster)
+data_matrix <- do.call(rbind, data_list)
+```
+
+## Fit Praxis-BGM
+
+```{r fit}
+result <- praxis_bgm_fit(
+  data = data_matrix,
+  K = 3,
+  seed = 123,
+  num_iters = 200,
+  batch_size = 100,
+  verbose = FALSE
+)
+```
+
+## Inspect results
+
+```{r inspect}
+str(result, max.level = 1)
+```
