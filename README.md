@@ -92,7 +92,7 @@ bf_results <- praxis_bgm_bf_selection(
 
 ## Tutorial
 
-`Praxis_R_Turtorial.Rmd` is an end-to-end tutorial that sources the R script, simulates
+`Praxis_R_Tutorial.Rmd` is an end-to-end tutorial that sources the R script, simulates
 Gaussian-mixture data, fits Praxis-BGM, and inspects outputs.
 
 The original Python tutorial notebook is here:
@@ -104,7 +104,7 @@ https://github.com/ContiLab-usc/Praxis-BGM/blob/main/Praxis_BGM_Tutorial.ipynb
 - `R/praxis_bgm_bf_selection.R`: R script that defines `praxis_bgm_bf_selection()` to run
   Bayes factor feature selection on fitted models.
 - `R/praxis_simulation.R`: R helpers for simulating source/target data in the tutorial/tests.
-- `Praxis_R_Turtorial.Rmd`: Tutorial that sources the R script and demonstrates fitting.
+- `Praxis_R_Tutorial.Rmd`: Tutorial that sources the R script and demonstrates fitting.
 - `DESCRIPTION` / `NAMESPACE`: Package metadata for the R wrapper.
 
 ## Notes
