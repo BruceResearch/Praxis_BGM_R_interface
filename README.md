@@ -1,9 +1,10 @@
 # Praxis_BGM_R_interface
 
 An R wrapper around the Python Praxis-BGM package using **reticulate**. This repo provides
-an R package-style structure with an R function (`R/praxis_bgm_fit.R`) that loads a conda
-environment and exposes a convenient `praxis_bgm_fit()` helper, plus an R Markdown
-tutorial (`Praxis_R_Turtorial.Rmd`).
+an R package-style structure with R helper functions (`R/praxis_bgm_fit.R` and
+`R/praxis_bgm_bf_selection.R`) that load a conda environment and expose convenient
+`praxis_bgm_fit()` and `praxis_bgm_bf_selection()` helpers, plus an R Markdown tutorial
+(`Praxis_R_Turtorial.Rmd`).
 
 ## About Praxis-BGM (Python/JAX)
 
@@ -68,6 +69,7 @@ Source the wrapper script in R. The script uses:
 library(reticulate)
 use_condaenv("jax_env")
 source("R/praxis_bgm_fit.R")
+source("R/praxis_bgm_bf_selection.R")
 ```
 
 Then call the wrapper function:
@@ -81,6 +83,16 @@ result <- praxis_bgm_fit(
 ```
 
 Returned elements include posterior parameters, responsibilities, and the model object.
+You can also run Bayes factor feature selection on a fitted model:
+
+```r
+bf_results <- praxis_bgm_bf_selection(
+  model = result,
+  data = your_matrix,
+  top_n = 40,
+  visual = FALSE
+)
+```
 
 ## Tutorial
 
@@ -93,6 +105,8 @@ https://github.com/ContiLab-usc/Praxis-BGM/blob/main/Praxis_BGM_Tutorial.ipynb
 ## Files
 
 - `R/praxis_bgm_fit.R`: R script that defines `praxis_bgm_fit()` for use with reticulate.
+- `R/praxis_bgm_bf_selection.R`: R script that defines `praxis_bgm_bf_selection()` to run
+  Bayes factor feature selection on fitted models.
 - `R/praxis_simulation.R`: R helpers for simulating source/target data in the tutorial/tests.
 - `Praxis_R_Turtorial.Rmd`: Tutorial that sources the R script and demonstrates fitting.
 - `DESCRIPTION` / `NAMESPACE`: Package metadata for the R wrapper.
