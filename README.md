@@ -1,10 +1,6 @@
-# Praxis_BGM_R_interface
+# Praxis-BGM R wrapper interface
 
-An R wrapper around the Python Praxis-BGM package using **reticulate**. This repo provides
-an R package-style structure with R helper functions (`R/praxis_bgm_fit.R` and
-`R/praxis_bgm_bf_selection.R`) that load a conda environment and expose convenient
-`praxis_bgm_fit()` and `praxis_bgm_bf_selection()` helpers, plus an R Markdown tutorial
-(`Praxis_R_Turtorial.Rmd`).
+An R wrapper for the Python **Praxis-BGM** package built with **reticulate**. This repository provides an R package–style structure with helper functions to activate a conda environment and expose user-friendly interfaces of R functions `praxis_bgm_fit()` and `praxis_bgm_bf_selection()`. These functions allow R users to run the underlying JAX-based Python implementation while keeping data preprocessing, analysis, and evaluation in R. The repository also includes an R Markdown tutorial (`Praxis_R_Tutorial.Rmd`) demonstrating end-to-end usage.
 
 ## About Praxis-BGM (Python/JAX)
 
