@@ -207,18 +207,26 @@ cat(sprintf("[TARGET] ARI QDA (source-trained, supervised): %.3f\n", ari_qda))
 bf_results <- praxis_bgm_bf_selection(
   model = result_prior,
   data = X_tgt,
-  top_n = 40,
-  visual = FALSE
+  top_n = 50,
+  visual = TRUE
 )
 
-topf <- bf_results$top_features
 
-if (reticulate::is_py_object(topf) || is.environment(topf)) {
-  topf <- reticulate::py_to_r(topf)
-}
+topf_py <- bf_results$top_features
+
+# Force to numpy ndarray on Python side
+topf_np <- np$asarray(topf_py)
+
+# Convert to R
+topf_r <- py_to_r(topf_np)
+
+# Make sure it's a plain integer vector
+topf <- as.integer(as.vector(topf_r))
+
+print(topf)
+
 
 topf <- as.integer(unlist(topf))
-print(topf)
 
 causal_features <- 0:(C - 1L)
 overlap_count <- length(intersect(topf, causal_features))
