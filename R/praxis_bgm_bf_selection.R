@@ -1,6 +1,6 @@
 library(reticulate)
 
-use_condaenv("jax_env")
+use_condaenv("Praxis_env")
 
 #' Perform Bayes factor feature selection for a fitted Praxis-BGM model
 #'
