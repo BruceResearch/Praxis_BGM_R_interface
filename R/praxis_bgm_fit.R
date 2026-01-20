@@ -1,6 +1,6 @@
 library(reticulate)
 
-use_condaenv("jax_env")
+use_condaenv("Praxis_env")
 
 #' Fit Praxis-BGM from R via reticulate
 #'
