@@ -63,7 +63,7 @@ Source the wrapper script in R. The script uses:
 
 ```r
 library(reticulate)
-use_condaenv("jax_env")
+use_condaenv("Praxis_env")
 source("R/praxis_bgm_fit.R")
 source("R/praxis_bgm_bf_selection.R")
 ```
