@@ -35,12 +35,12 @@ implemented in **JAX** for GPU/TPU acceleration and numerically stable updates.
 
 > **Important:** Install the Python package **before** calling the R wrapper.
 
-Create a conda environment (example name: `jax_env`) and install requirements including the Python version of Praxis-BGM as a dependency. Adjust to
+Create a conda environment (example name: `Praxis_env`) and install requirements including the Python version of Praxis-BGM as a dependency. Adjust to
 match your Praxis-BGM installation instructions.
 
 ```bash
-conda create -n jax_env python=3.10 -y
-conda activate jax_env
+conda create -n Praxis_env python=3.10 -y
+conda activate Praxis_env
 pip install jax jaxlib numpy scikit-learn matplotlib
 pip install git+https://github.com/ContiLab-usc/Praxis-BGM.git
 ```
