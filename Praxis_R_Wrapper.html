@@ -13,7 +13,7 @@
 
 <meta name="date" content="2026-04-20" />
 
-<title>Praxis-BGM R Tutorial</title>
+<title>Praxis-BGM R Wrapper</title>
 
 <script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
 // be compatible with the behavior of Pandoc < 2.8).
@@ -350,7 +350,7 @@ display: none;
 
 
 
-<h1 class="title toc-ignore">Praxis-BGM R Tutorial</h1>
+<h1 class="title toc-ignore">Praxis-BGM R Wrapper</h1>
 <h4 class="author">Qiran Jia</h4>
 <h4 class="date">2026-04-20</h4>
 
@@ -359,245 +359,258 @@ display: none;
 
 <div id="overview" class="section level2">
 <h2>Overview</h2>
-<p>This tutorial shows how to use the updated Praxis-BGM R interface
-from the single wrapper script <code>R/praxis_bgm_interface.R</code>. It
-reproduces an R-based workflow with:</p>
+<p>This document describes the updated R interface for the current
+Python <code>praxis_bgm</code> package. The repository now keeps the
+wrapper logic in a single script:</p>
 <ul>
-<li>simulated source data</li>
-<li>transferred priors for target-domain fitting</li>
-<li>a no-prior comparison fit</li>
-<li>Bayes-factor feature selection through
-<code>praxis_bgm_bf_selection()</code></li>
+<li><code>R/praxis_bgm_interface.R</code></li>
 </ul>
+<p>That script is the source of truth for:</p>
+<ul>
+<li><code>praxis_bgm_fit()</code></li>
+<li><code>praxis_bgm_bf_selection()</code></li>
+<li>the simulation helpers used in tutorials and tests</li>
+</ul>
+<p>The wrapper now matches the current Python constructor,
+including:</p>
+<ul>
+<li><code>prior_weights</code> instead of <code>prior_pis</code></li>
+<li><code>init_pis</code> for initialization weights</li>
+<li><code>freeze_A_zeros</code> for adjacency-mask freezing</li>
+<li><code>data_precision_int</code>, <code>likelihood_temp</code>,
+<code>rho_prec</code>, <code>rho_mu</code>, and
+<code>elbo_eval_freq</code></li>
+</ul>
+<p>The BF-selection logic itself is unchanged from the Python
+package.</p>
 </div>
 <div id="setup" class="section level2">
 <h2>Setup</h2>
-<p>If needed, install the R packages used by this tutorial:</p>
-<pre class="r"><code>install.packages(c(&quot;reticulate&quot;, &quot;MASS&quot;, &quot;mclust&quot;, &quot;proxy&quot;, &quot;clue&quot;, &quot;rmarkdown&quot;))</code></pre>
+<pre class="r"><code>py_config()
+#&gt; python:         /Users/qiranjia19961112/.conda/envs/Praxis_env/bin/python
+#&gt; libpython:      /Users/qiranjia19961112/.conda/envs/Praxis_env/lib/libpython3.10.dylib
+#&gt; pythonhome:     /Users/qiranjia19961112/.conda/envs/Praxis_env:/Users/qiranjia19961112/.conda/envs/Praxis_env
+#&gt; version:        3.10.20 (main, Mar 11 2026, 17:43:48) [Clang 20.1.8 ]
+#&gt; numpy:          /Users/qiranjia19961112/.conda/envs/Praxis_env/lib/python3.10/site-packages/numpy
+#&gt; numpy_version:  2.2.6
+#&gt; 
+#&gt; NOTE: Python version was forced by RETICULATE_PYTHON</code></pre>
 </div>
-<div id="simulate-source-data" class="section level2">
-<h2>Simulate source data</h2>
-<pre class="r"><code>K &lt;- 4L
-P &lt;- 100L
-C &lt;- 40L
-N_src &lt;- 800L
+<div id="wrapper-entry-points" class="section level2">
+<h2>Wrapper entry points</h2>
+<pre class="r"><code>args(praxis_bgm_fit)
+#&gt; function (data, K, seed = 0L, prior_mus = NULL, prior_Sigmas = NULL, 
+#&gt;     prior_weights = NULL, init_mus = NULL, init_covs = NULL, 
+#&gt;     init_pis = NULL, beta = 0.001, tol = 1e-04, max_iters = 1000L, 
+#&gt;     verbose = TRUE, sparse_A = NULL, cluster_A = NULL, freeze_A_zeros = FALSE, 
+#&gt;     prior_mus_variance = 1, num_samples = 100L, data_precision_int = NULL, 
+#&gt;     likelihood_temp = 1, rho_prec = 0.05, rho_mu = 1, elbo_eval_freq = 10L, 
+#&gt;     num_iters = 50L, batch_size = NULL, early_stop = FALSE, patience = 2L) 
+#&gt; NULL
+args(praxis_bgm_bf_selection)
+#&gt; function (model, data, top_n = 20L, visual = FALSE) 
+#&gt; NULL</code></pre>
+</div>
+<div id="minimal-example" class="section level2">
+<h2>Minimal example</h2>
+<pre class="r"><code>set.seed(123)
 
-source_data &lt;- generate_overlapping_gmm_samples(
-  n_components = K,
-  n_causal = C,
-  n_features = P,
-  n_samples = N_src,
-  random_seed = 123
+n_per_cluster &lt;- 40L
+
+cluster_1 &lt;- cbind(
+  rnorm(n_per_cluster, mean = -2.0, sd = 0.45),
+  rnorm(n_per_cluster, mean = -1.8, sd = 0.50)
 )
 
-X_src &lt;- source_data$samples
-y_src &lt;- source_data$labels
-true_means_src &lt;- source_data$full_means
-
-cat(&quot;X_src shape:&quot;, dim(X_src), &quot;\n&quot;)
-#&gt; X_src shape: 800 100
-cat(&quot;True means (source) shape:&quot;, dim(true_means_src), &quot;\n&quot;)
-#&gt; True means (source) shape: 4 100</code></pre>
-</div>
-<div id="learn-source-priors" class="section level2">
-<h2>Learn source priors</h2>
-<pre class="r"><code>prior_mus_src &lt;- do.call(
-  rbind,
-  lapply(seq_len(K), function(k) {
-    Xk &lt;- X_src[y_src == (k - 1L), , drop = FALSE]
-    if (nrow(Xk) == 0L) {
-      stop(sprintf(&quot;No samples found for source cluster %d.&quot;, k - 1L))
-    }
-    colMeans(Xk)
-  })
+cluster_2 &lt;- cbind(
+  rnorm(n_per_cluster, mean = 2.1, sd = 0.50),
+  rnorm(n_per_cluster, mean = 1.9, sd = 0.45)
 )
 
-prior_weights_src &lt;- as.numeric(table(factor(y_src, levels = 0:(K - 1L)))) / length(y_src)
-prior_Sigmas_src &lt;- source_data$covs
+X &lt;- rbind(cluster_1, cluster_2)
+colnames(X) &lt;- c(&quot;feature_1&quot;, &quot;feature_2&quot;)
 
-cat(&quot;Empirical source prior weights:&quot;, round(prior_weights_src, 3), &quot;\n&quot;)
-#&gt; Empirical source prior weights: 0.25 0.25 0.25 0.25
-cat(&quot;Prior means shape:&quot;, dim(prior_mus_src), &quot;\n&quot;)
-#&gt; Prior means shape: 4 100</code></pre>
-</div>
-<div id="supervised-qda-baseline-from-source" class="section level2">
-<h2>Supervised QDA baseline from source</h2>
-<pre class="r"><code>qda &lt;- MASS::qda(X_src, grouping = as.factor(y_src))
-cat(&quot;QDA fit complete.\n&quot;)
-#&gt; QDA fit complete.</code></pre>
-</div>
-<div id="simulate-target-data-with-domain-shift" class="section level2">
-<h2>Simulate target data with domain shift</h2>
-<pre class="r"><code>N_tgt &lt;- 200L
-mean_shift_tgt &lt;- 0.3
-shift_percentage &lt;- 0.3
-
-true_means_tgt &lt;- randomly_shift_means(
-  true_means_src,
-  shift_magnitude = mean_shift_tgt,
-  percentage = shift_percentage,
-  random_seed = 999
+prior_mus &lt;- rbind(
+  c(-1.9, -1.9),
+  c(2.0, 2.0)
 )
 
-set.seed(999)
-target_sizes &lt;- rep(N_tgt %/% K, K)
-if (N_tgt %% K &gt; 0L) {
-  target_sizes[seq_len(N_tgt %% K)] &lt;- target_sizes[seq_len(N_tgt %% K)] + 1L
-}
-
-X_tgt_list &lt;- vector(&quot;list&quot;, K)
-y_tgt_list &lt;- vector(&quot;list&quot;, K)
-
-for (k in seq_len(K)) {
-  n_k &lt;- target_sizes[k]
-
-  causal_tgt &lt;- MASS::mvrnorm(
-    n_k,
-    true_means_tgt[k, seq_len(C)],
-    diag(C)
-  )
-  causal_tgt &lt;- matrix(causal_tgt, nrow = n_k, ncol = C)
-
-  non_causal_tgt &lt;- matrix(
-    rnorm(n_k * (P - C)),
-    ncol = P - C
-  )
-
-  X_tgt_list[[k]] &lt;- cbind(causal_tgt, non_causal_tgt)
-  y_tgt_list[[k]] &lt;- rep(k - 1L, n_k)
-}
-
-X_tgt &lt;- do.call(rbind, X_tgt_list)
-y_tgt &lt;- unlist(y_tgt_list, use.names = FALSE)
-
-cat(&quot;X_tgt shape:&quot;, dim(X_tgt), &quot;\n&quot;)
-#&gt; X_tgt shape: 200 100
-cat(&quot;True means (target) shape:&quot;, dim(true_means_tgt), &quot;\n&quot;)
-#&gt; True means (target) shape: 4 100</code></pre>
-</div>
-<div id="qda-baseline-on-target" class="section level2">
-<h2>QDA baseline on target</h2>
-<pre class="r"><code>qda_preds &lt;- predict(qda, X_tgt)$class
-ari_qda &lt;- mclust::adjustedRandIndex(y_tgt, as.integer(as.character(qda_preds)))
-
-cat(sprintf(&quot;Target ARI for source-trained QDA: %.3f\n&quot;, ari_qda))
-#&gt; Target ARI for source-trained QDA: 0.096</code></pre>
-</div>
-<div id="praxis-bgm-with-transferred-priors" class="section level2">
-<h2>Praxis-BGM with transferred priors</h2>
-<pre class="r"><code>fit_prior &lt;- praxis_bgm_fit(
-  data = X_tgt,
-  K = K,
-  seed = 123L,
-  prior_mus = prior_mus_src,
-  prior_Sigmas = prior_Sigmas_src,
-  prior_weights = prior_weights_src,
-  beta = 1e-4,
-  tol = 1e-4,
-  max_iters = 300L,
-  verbose = FALSE,
-  prior_mus_variance = 1.5,
-  num_samples = 64L,
-  data_precision_int = 1L,
-  likelihood_temp = 1.0,
-  rho_prec = 0.05,
-  rho_mu = 1.0,
-  elbo_eval_freq = 5L,
-  num_iters = 120L,
-  batch_size = 64L,
-  early_stop = TRUE,
-  patience = 5L
-)
-
-ari_prior &lt;- mclust::adjustedRandIndex(y_tgt, fit_prior$assignments_zero_based)
-cat(sprintf(&quot;Target ARI with transferred priors: %.3f\n&quot;, ari_prior))
-#&gt; Target ARI with transferred priors: 0.588</code></pre>
-</div>
-<div id="praxis-bgm-without-priors" class="section level2">
-<h2>Praxis-BGM without priors</h2>
-<pre class="r"><code>fit_noprior &lt;- praxis_bgm_fit(
-  data = X_tgt,
-  K = K,
-  seed = 123L,
-  prior_mus = NULL,
-  prior_Sigmas = NULL,
-  prior_weights = NULL,
+prior_Sigmas &lt;- array(0, dim = c(2, 2, 2))
+prior_Sigmas[1, , ] &lt;- diag(c(1.0, 1.0))
+prior_Sigmas[2, , ] &lt;- diag(c(1.0, 1.0))</code></pre>
+<pre class="r"><code>fit &lt;- praxis_bgm_fit(
+  data = X,
+  K = 2L,
+  seed = 42L,
+  prior_mus = prior_mus,
+  prior_Sigmas = prior_Sigmas,
+  prior_weights = c(0.5, 0.5),
   beta = 1e-3,
   tol = 1e-4,
-  max_iters = 300L,
-  verbose = FALSE,
-  prior_mus_variance = 10.0,
-  num_samples = 64L,
+  max_iters = 60L,
+  num_iters = 8L,
+  batch_size = 40L,
+  num_samples = 8L,
   data_precision_int = 1L,
   likelihood_temp = 1.0,
-  rho_prec = 0.05,
+  rho_prec = 0.08,
   rho_mu = 1.0,
-  elbo_eval_freq = 5L,
-  num_iters = 120L,
-  batch_size = 64L,
+  elbo_eval_freq = 1L,
   early_stop = TRUE,
-  patience = 5L
-)
-
-ari_noprior &lt;- mclust::adjustedRandIndex(y_tgt, fit_noprior$assignments_zero_based)
-cat(sprintf(&quot;Target ARI without priors: %.3f\n&quot;, ari_noprior))
-#&gt; Target ARI without priors: 0.117</code></pre>
+  patience = 2L,
+  verbose = FALSE
+)</code></pre>
 </div>
-<div id="summary" class="section level2">
-<h2>Summary</h2>
-<pre class="r"><code>cat(&quot;=== SUMMARY ===\n&quot;)
-#&gt; === SUMMARY ===
-cat(sprintf(&quot;Praxis-BGM with transferred priors: %.3f\n&quot;, ari_prior))
-#&gt; Praxis-BGM with transferred priors: 0.588
-cat(sprintf(&quot;Praxis-BGM without priors:         %.3f\n&quot;, ari_noprior))
-#&gt; Praxis-BGM without priors:         0.117
-cat(sprintf(&quot;Source-trained QDA baseline:       %.3f\n&quot;, ari_qda))
-#&gt; Source-trained QDA baseline:       0.096</code></pre>
+<div id="results" class="section level2">
+<h2>Results</h2>
+<pre class="r"><code>fit$assignments[1:10]
+#&gt;  [1] 1 1 1 1 1 1 1 1 1 1
+fit$assignments_zero_based[1:10]
+#&gt;  [1] 0 0 0 0 0 0 0 0 0 0
+fit$learned_weights
+#&gt; [1] 0.4933388 0.5066612
+fit$model_summary
+#&gt; $variant
+#&gt; [1] &quot;Praxis_BGM_global_z_prior_damped&quot;
+#&gt; 
+#&gt; $family
+#&gt; [1] &quot;Gaussian mixture model with a global mixture prior on latent z&quot;
+#&gt; 
+#&gt; $latent_prior
+#&gt; [1] &quot;p(z) = sum_k pi0_k N(z | prior_mu_k, prior_Sigma_k)&quot;
+#&gt; 
+#&gt; $variational_family
+#&gt; [1] &quot;q(z) = sum_k pi_k N(z | mu_k, Sigma_k)&quot;
+#&gt; 
+#&gt; $observation_model
+#&gt; [1] &quot;x | z ~ N(z, Lambda_x^{-1})&quot;
+#&gt; 
+#&gt; $objective
+#&gt; [1] &quot;h(z) = log q(z) - log p(z) - scaled minibatch log-likelihood&quot;
+#&gt; 
+#&gt; $updates
+#&gt; $updates$anchor_sampling
+#&gt; [1] &quot;Sample anchor z from the current mixture&quot;
+#&gt; 
+#&gt; $updates$responsibility_coupling
+#&gt; [1] &quot;All components receive updates through delta_j(z)&quot;
+#&gt; 
+#&gt; $updates$mean_update
+#&gt; [1] &quot;Damped natural-gradient step using updated covariance&quot;
+#&gt; 
+#&gt; $updates$covariance_update
+#&gt; [1] &quot;Damped precision blending toward Hessian targets&quot;
+#&gt; 
+#&gt; $updates$weight_update
+#&gt; [1] &quot;Softmax-logit update using delta-weighted h(z)&quot;
+#&gt; 
+#&gt; 
+#&gt; $hyperparameters
+#&gt; $hyperparameters$K
+#&gt; [1] 2
+#&gt; 
+#&gt; $hyperparameters$beta
+#&gt; [1] 0.001
+#&gt; 
+#&gt; $hyperparameters$num_samples
+#&gt; [1] 8
+#&gt; 
+#&gt; $hyperparameters$likelihood_temp
+#&gt; [1] 1
+#&gt; 
+#&gt; $hyperparameters$rho_prec
+#&gt; [1] 0.08
+#&gt; 
+#&gt; $hyperparameters$rho_mu
+#&gt; [1] 1
+#&gt; 
+#&gt; $hyperparameters$data_precision_int
+#&gt; [1] 1
+#&gt; 
+#&gt; $hyperparameters$elbo_eval_freq
+#&gt; [1] 1
+#&gt; 
+#&gt; $hyperparameters$freeze_A_zeros
+#&gt; [1] FALSE
+#&gt; 
+#&gt; 
+#&gt; $priors
+#&gt; $priors$mean_prior_source
+#&gt; [1] &quot;user&quot;
+#&gt; 
+#&gt; $priors$cov_prior_source
+#&gt; [1] &quot;user&quot;
+#&gt; 
+#&gt; $priors$weight_prior_source
+#&gt; [1] &quot;user&quot;
+#&gt; 
+#&gt; 
+#&gt; $fitted
+#&gt; [1] TRUE
+#&gt; 
+#&gt; $learned_state
+#&gt; $learned_state$pis
+#&gt; [1] 0.4933388 0.5066612
+#&gt; 
+#&gt; $learned_state$mus_shape
+#&gt; $learned_state$mus_shape[[1]]
+#&gt; [1] 2
+#&gt; 
+#&gt; $learned_state$mus_shape[[2]]
+#&gt; [1] 2
+#&gt; 
+#&gt; 
+#&gt; $learned_state$covariances_shape
+#&gt; $learned_state$covariances_shape[[1]]
+#&gt; [1] 2
+#&gt; 
+#&gt; $learned_state$covariances_shape[[2]]
+#&gt; [1] 2
+#&gt; 
+#&gt; $learned_state$covariances_shape[[3]]
+#&gt; [1] 2
+#&gt; 
+#&gt; 
+#&gt; $learned_state$last_mc_elbo
+#&gt; [1] -793.3185
+tail(fit$elbo_history, 3)
+#&gt; [1] -868.0289 -808.1086 -793.3185</code></pre>
 </div>
 <div id="bayes-factor-feature-selection" class="section level2">
 <h2>Bayes-factor feature selection</h2>
-<pre class="r"><code>bf_results &lt;- praxis_bgm_bf_selection(
-  model = fit_prior,
-  data = X_tgt,
-  top_n = 40L,
+<pre class="r"><code>bf &lt;- praxis_bgm_bf_selection(
+  model = fit,
+  data = X,
+  top_n = 2L,
   visual = FALSE
 )
 
-top_features &lt;- bf_results$top_features
-bf_classification &lt;- bf_results$classification
-causal_features &lt;- seq_len(C)
-overlap_count &lt;- length(intersect(top_features, causal_features))
-
-top_features[1:10]
-#&gt;  [1] 35 34 29  2 38 32  5 25 16  7
-bf_classification
+bf$top_features
+#&gt; [1] 1 2
+bf$top_features_zero_based
+#&gt; [1] 0 1
+bf$classification
 #&gt; $Indeterminate
-#&gt;  [1]   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16  17  18  19
-#&gt; [20]  20  21  22  23  24  25  26  27  28  30  31  32  33  36  37  38  39  40  41
-#&gt; [39]  42  43  44  45  46  47  48  49  50  51  52  53  54  55  56  57  58  59  60
-#&gt; [58]  61  62  63  64  65  66  67  68  69  70  71  72  73  74  75  76  77  78  79
-#&gt; [77]  80  81  82  83  84  85  86  87  88  89  90  91  92  93  94  95  96  97  98
-#&gt; [96]  99 100
+#&gt; integer(0)
 #&gt; 
 #&gt; $Positive
-#&gt; [1] 29 34
+#&gt; integer(0)
 #&gt; 
 #&gt; $Strong
-#&gt; [1] 35
+#&gt; integer(0)
 #&gt; 
 #&gt; $`Very strong`
 #&gt; integer(0)
 #&gt; 
 #&gt; $Decisive
-#&gt; integer(0)
-cat(&quot;Top-40 overlap with causal features:&quot;, overlap_count, &quot;\n&quot;)
-#&gt; Top-40 overlap with causal features: 23</code></pre>
+#&gt; [1] 1 2</code></pre>
 </div>
 <div id="notes" class="section level2">
 <h2>Notes</h2>
-<pre><code>#&gt; - `fit_prior$assignments_zero_based` is used for exact comparison with the zero-based simulated labels.
-#&gt; - `praxis_bgm_bf_selection()` returns one-based feature indices in `top_features` for R users.
-#&gt; - The underlying BF scoring logic is still the Python Praxis-BGM implementation.</code></pre>
+<pre><code>#&gt; - `assignments` are returned as 1-based labels for R users.
+#&gt; - `assignments_zero_based` preserves the raw Python labels.
+#&gt; - `top_features` are returned as 1-based feature indices, and `top_features_zero_based` preserves the Python indices.
+#&gt; - `model` remains a live Python object for advanced downstream use.</code></pre>
 </div>
 
 

@@ -1,8 +1,7 @@
 library(testthat)
 library(reticulate)
 
-source("R/praxis_bgm_fit.R")
-source("R/praxis_simulation.R")
+source(testthat::test_path("..", "..", "R", "praxis_bgm_interface.R"))
 
 skip_if_no_modules <- function() {
   if (!py_module_available("praxis_bgm")) {
@@ -16,8 +15,8 @@ skip_if_no_modules <- function() {
 test_that("praxis_bgm_fit validates required inputs", {
   skip_if_no_modules()
 
-  expect_error(praxis_bgm_fit(), "`data` is required")
-  expect_error(praxis_bgm_fit(data = matrix(1, nrow = 2), K = 0), "positive integer")
+  expect_error(praxis_bgm_fit(K = 2), "`data` is required")
+  expect_error(praxis_bgm_fit(data = matrix(1, nrow = 2), K = 0), "greater than or equal to 2")
 })
 
 test_that("simulation helpers return expected shapes", {
@@ -67,5 +66,27 @@ test_that("praxis_bgm_fit runs with different priors and sizes", {
   )
 
   expect_true(is.list(result))
-  expect_true(all(c("posterior_mus", "posterior_covs", "posterior_pis", "responsibilities", "model") %in% names(result)))
+  expect_true(all(
+    c(
+      "assignments",
+      "assignments_zero_based",
+      "learned_weights",
+      "posterior_mus",
+      "posterior_covs",
+      "posterior_pis",
+      "responsibilities",
+      "model_summary",
+      "elbo_history",
+      "model"
+    ) %in% names(result)
+  ))
+})
+
+test_that("praxis_bgm_bf_selection validates inputs", {
+  skip_if_no_modules()
+
+  expect_error(
+    praxis_bgm_bf_selection(model = list(), data = matrix(1, nrow = 2), top_n = 0),
+    "`top_n` must be a positive integer"
+  )
 })

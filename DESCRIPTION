@@ -4,8 +4,9 @@ Version: 0.1.0
 Authors@R: c(
     person("Qiran", "Jia", role = c("aut", "cre"))
 )
-Description: Provides an R interface to the Praxis-BGM Python/JAX implementation
-    via reticulate, including helper functions and an R Markdown tutorial.
+Description: Provides an updated R interface to the Praxis-BGM Python/JAX
+    implementation via reticulate, including a single wrapper script,
+    Bayes-factor feature selection, simulation helpers, and R Markdown tutorials.
 License: MIT
 Encoding: UTF-8
 LazyData: true
@@ -15,4 +16,6 @@ Imports:
     proxy,
     clue
 Suggests:
+    mclust,
+    rmarkdown,
     testthat (>= 3.0.0)

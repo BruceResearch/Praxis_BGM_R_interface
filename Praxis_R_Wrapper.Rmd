@@ -1,0 +1,153 @@
+---
+title: "Praxis-BGM R Wrapper"
+author: "Qiran Jia"
+date: "2026-04-20"
+output:
+  html_document: default
+---
+
+## Overview
+
+This document describes the updated R interface for the current Python
+`praxis_bgm` package. The repository now keeps the wrapper logic in a single
+script:
+
+- `R/praxis_bgm_interface.R`
+
+That script is the source of truth for:
+
+- `praxis_bgm_fit()`
+- `praxis_bgm_bf_selection()`
+- the simulation helpers used in tutorials and tests
+
+The wrapper now matches the current Python constructor, including:
+
+- `prior_weights` instead of `prior_pis`
+- `init_pis` for initialization weights
+- `freeze_A_zeros` for adjacency-mask freezing
+- `data_precision_int`, `likelihood_temp`, `rho_prec`, `rho_mu`, and
+  `elbo_eval_freq`
+
+The BF-selection logic itself is unchanged from the Python package.
+
+## Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(comment = "#>", collapse = TRUE)
+
+library(reticulate)
+
+praxis_python <- Sys.getenv("RETICULATE_PYTHON", unset = "")
+if (nzchar(praxis_python)) {
+  use_python(praxis_python, required = TRUE)
+} else {
+  use_condaenv("Praxis_env", required = TRUE)
+}
+
+source("R/praxis_bgm_interface.R")
+```
+
+```{r py-config}
+py_config()
+```
+
+## Wrapper entry points
+
+```{r signatures}
+args(praxis_bgm_fit)
+args(praxis_bgm_bf_selection)
+```
+
+## Minimal example
+
+```{r example-data}
+set.seed(123)
+
+n_per_cluster <- 40L
+
+cluster_1 <- cbind(
+  rnorm(n_per_cluster, mean = -2.0, sd = 0.45),
+  rnorm(n_per_cluster, mean = -1.8, sd = 0.50)
+)
+
+cluster_2 <- cbind(
+  rnorm(n_per_cluster, mean = 2.1, sd = 0.50),
+  rnorm(n_per_cluster, mean = 1.9, sd = 0.45)
+)
+
+X <- rbind(cluster_1, cluster_2)
+colnames(X) <- c("feature_1", "feature_2")
+
+prior_mus <- rbind(
+  c(-1.9, -1.9),
+  c(2.0, 2.0)
+)
+
+prior_Sigmas <- array(0, dim = c(2, 2, 2))
+prior_Sigmas[1, , ] <- diag(c(1.0, 1.0))
+prior_Sigmas[2, , ] <- diag(c(1.0, 1.0))
+```
+
+```{r example-fit}
+fit <- praxis_bgm_fit(
+  data = X,
+  K = 2L,
+  seed = 42L,
+  prior_mus = prior_mus,
+  prior_Sigmas = prior_Sigmas,
+  prior_weights = c(0.5, 0.5),
+  beta = 1e-3,
+  tol = 1e-4,
+  max_iters = 60L,
+  num_iters = 8L,
+  batch_size = 40L,
+  num_samples = 8L,
+  data_precision_int = 1L,
+  likelihood_temp = 1.0,
+  rho_prec = 0.08,
+  rho_mu = 1.0,
+  elbo_eval_freq = 1L,
+  early_stop = TRUE,
+  patience = 2L,
+  verbose = FALSE
+)
+```
+
+## Results
+
+```{r results}
+fit$assignments[1:10]
+fit$assignments_zero_based[1:10]
+fit$learned_weights
+fit$model_summary
+tail(fit$elbo_history, 3)
+```
+
+## Bayes-factor feature selection
+
+```{r bf-selection}
+bf <- praxis_bgm_bf_selection(
+  model = fit,
+  data = X,
+  top_n = 2L,
+  visual = FALSE
+)
+
+bf$top_features
+bf$top_features_zero_based
+bf$classification
+```
+
+## Notes
+
+```{r notes, echo=FALSE}
+cat(
+  paste(
+    "- `assignments` are returned as 1-based labels for R users.",
+    "- `assignments_zero_based` preserves the raw Python labels.",
+    "- `top_features` are returned as 1-based feature indices, and `top_features_zero_based` preserves the Python indices.",
+    "- `model` remains a live Python object for advanced downstream use.",
+    sep = "\n"
+  )
+)
+```

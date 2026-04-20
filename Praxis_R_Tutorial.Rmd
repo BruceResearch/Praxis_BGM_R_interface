@@ -1,7 +1,7 @@
 ---
-title: "Praxis_R_Turtorial"
+title: "Praxis-BGM R Tutorial"
 author: "Qiran Jia"
-date: "2025-10-01"
+date: "2026-04-20"
 output:
   html_document: default
   pdf_document: default
@@ -9,37 +9,47 @@ output:
 
 ## Overview
 
-This tutorial shows how to source the `R/praxis_bgm_fit.R` script and reproduce the
-Python tutorial workflow in R, including simulation, baselines, and Praxis-BGM fitting.
+This tutorial shows how to use the updated Praxis-BGM R interface from the
+single wrapper script `R/praxis_bgm_interface.R`. It reproduces an R-based
+workflow with:
+
+- simulated source data
+- transferred priors for target-domain fitting
+- a no-prior comparison fit
+- Bayes-factor feature selection through `praxis_bgm_bf_selection()`
 
 ## Setup
 
 ```{r setup, include=FALSE}
-source("R/praxis_bgm_fit.R")
-source("R/praxis_bgm_bf_selection.R")
-source("R/praxis_simulation.R")
+knitr::opts_chunk$set(comment = "#>", collapse = TRUE)
+
 library(reticulate)
 library(MASS)
 library(mclust)
-library(proxy)
-library(clue)
 
-np <- import("numpy", delay_load = TRUE)
+praxis_python <- Sys.getenv("RETICULATE_PYTHON", unset = "")
+if (nzchar(praxis_python)) {
+  use_python(praxis_python, required = TRUE)
+} else {
+  use_condaenv("Praxis_env", required = TRUE)
+}
+
+source("R/praxis_bgm_interface.R")
 ```
 
-If these R packages are missing, install them first:
+If needed, install the R packages used by this tutorial:
 
 ```{r install-packages, eval=FALSE}
-install.packages(c("MASS", "mclust", "proxy", "clue"))
+install.packages(c("reticulate", "MASS", "mclust", "proxy", "clue", "rmarkdown"))
 ```
 
-## Simulate SOURCE data
+## Simulate source data
 
 ```{r source-sim}
-K <- 4
-P <- 100
-C <- 40
-N_src <- 800
+K <- 4L
+P <- 100L
+C <- 40L
+N_src <- 800L
 
 source_data <- generate_overlapping_gmm_samples(
   n_components = K,
@@ -57,37 +67,38 @@ cat("X_src shape:", dim(X_src), "\n")
 cat("True means (source) shape:", dim(true_means_src), "\n")
 ```
 
-## Learning priors from SOURCE
+## Learn source priors
 
 ```{r source-priors}
-mus_post_src <- do.call(
+prior_mus_src <- do.call(
   rbind,
   lapply(seq_len(K), function(k) {
     Xk <- X_src[y_src == (k - 1L), , drop = FALSE]
-    if (nrow(Xk) == 0) {
-      stop(sprintf("No samples for cluster %d in source data!", k))
+    if (nrow(Xk) == 0L) {
+      stop(sprintf("No samples found for source cluster %d.", k - 1L))
     }
     colMeans(Xk)
   })
 )
 
-pis_src_emp <- as.numeric(table(factor(y_src, levels = 0:(K - 1L)))) / length(y_src)
+prior_weights_src <- as.numeric(table(factor(y_src, levels = 0:(K - 1L)))) / length(y_src)
+prior_Sigmas_src <- source_data$covs
 
-cat("Empirical SOURCE π:", round(pis_src_emp, 3), "\n")
-cat("Empirical SOURCE means shape:", dim(mus_post_src), "\n")
+cat("Empirical source prior weights:", round(prior_weights_src, 3), "\n")
+cat("Prior means shape:", dim(prior_mus_src), "\n")
 ```
 
-## QDA baseline trained on SOURCE
+## Supervised QDA baseline from source
 
 ```{r qda-source}
 qda <- MASS::qda(X_src, grouping = as.factor(y_src))
-cat("QDA fitted on SOURCE.\n")
+cat("QDA fit complete.\n")
 ```
 
-## Simulate TARGET data (domain shift)
+## Simulate target data with domain shift
 
 ```{r target-sim}
-N_tgt <- 200
+N_tgt <- 200L
 mean_shift_tgt <- 0.3
 shift_percentage <- 0.3
 
@@ -99,136 +110,149 @@ true_means_tgt <- randomly_shift_means(
 )
 
 set.seed(999)
-samples_per_component_tgt <- N_tgt %/% K
+target_sizes <- rep(N_tgt %/% K, K)
+if (N_tgt %% K > 0L) {
+  target_sizes[seq_len(N_tgt %% K)] <- target_sizes[seq_len(N_tgt %% K)] + 1L
+}
 
 X_tgt_list <- vector("list", K)
 y_tgt_list <- vector("list", K)
+
 for (k in seq_len(K)) {
+  n_k <- target_sizes[k]
+
   causal_tgt <- MASS::mvrnorm(
-    samples_per_component_tgt,
+    n_k,
     true_means_tgt[k, seq_len(C)],
     diag(C)
   )
+  causal_tgt <- matrix(causal_tgt, nrow = n_k, ncol = C)
+
   non_causal_tgt <- matrix(
-    rnorm(samples_per_component_tgt * (P - C)),
+    rnorm(n_k * (P - C)),
     ncol = P - C
   )
+
   X_tgt_list[[k]] <- cbind(causal_tgt, non_causal_tgt)
-  y_tgt_list[[k]] <- rep(k - 1L, samples_per_component_tgt)
+  y_tgt_list[[k]] <- rep(k - 1L, n_k)
 }
 
 X_tgt <- do.call(rbind, X_tgt_list)
-y_tgt <- unlist(y_tgt_list)
+y_tgt <- unlist(y_tgt_list, use.names = FALSE)
 
 cat("X_tgt shape:", dim(X_tgt), "\n")
 cat("True means (target) shape:", dim(true_means_tgt), "\n")
 ```
 
-## QDA baseline on TARGET
+## QDA baseline on target
 
 ```{r qda-target}
 qda_preds <- predict(qda, X_tgt)$class
 ari_qda <- mclust::adjustedRandIndex(y_tgt, as.integer(as.character(qda_preds)))
-cat(sprintf("[TARGET] ARI QDA (source-trained, supervised): %.3f\n", ari_qda))
+
+cat(sprintf("Target ARI for source-trained QDA: %.3f\n", ari_qda))
 ```
 
-## TARGET: Praxis-BGM with transferred priors
+## Praxis-BGM with transferred priors
 
-```{r praxis-priors}
-result_prior <- praxis_bgm_fit(
+```{r praxis-prior-fit}
+fit_prior <- praxis_bgm_fit(
   data = X_tgt,
   K = K,
-  seed = 123,
-  prior_mus = mus_post_src,
-  prior_pis = NULL,
+  seed = 123L,
+  prior_mus = prior_mus_src,
+  prior_Sigmas = prior_Sigmas_src,
+  prior_weights = prior_weights_src,
   beta = 1e-4,
   tol = 1e-4,
-  max_iters = 300,
-  verbose = TRUE,
+  max_iters = 300L,
+  verbose = FALSE,
   prior_mus_variance = 1.5,
-  num_samples = 64,
-  enforce_mask = FALSE,
-  mask_space = "precision",
-  spd_eps = 1e-6,
-  num_iters = 120,
-  batch_size = 64,
+  num_samples = 64L,
+  data_precision_int = 1L,
+  likelihood_temp = 1.0,
+  rho_prec = 0.05,
+  rho_mu = 1.0,
+  elbo_eval_freq = 5L,
+  num_iters = 120L,
+  batch_size = 64L,
   early_stop = TRUE,
-  patience = 5
+  patience = 5L
 )
 
-pred_prior <- result_prior$model$predict(np$array(X_tgt, dtype = "float32"))
-yhat_prior <- reticulate::py_to_r(pred_prior[[1]])
-ari_prior <- mclust::adjustedRandIndex(y_tgt, yhat_prior)
-cat(sprintf("[TARGET] ARI with transferred priors: %.3f\n", ari_prior))
+ari_prior <- mclust::adjustedRandIndex(y_tgt, fit_prior$assignments_zero_based)
+cat(sprintf("Target ARI with transferred priors: %.3f\n", ari_prior))
 ```
 
-## TARGET: Praxis-BGM without priors (baseline)
+## Praxis-BGM without priors
 
-```{r praxis-noprior}
-result_noprior <- praxis_bgm_fit(
+```{r praxis-no-prior-fit}
+fit_noprior <- praxis_bgm_fit(
   data = X_tgt,
   K = K,
-  seed = 123,
+  seed = 123L,
   prior_mus = NULL,
   prior_Sigmas = NULL,
+  prior_weights = NULL,
   beta = 1e-3,
   tol = 1e-4,
-  max_iters = 300,
-  verbose = TRUE,
+  max_iters = 300L,
+  verbose = FALSE,
   prior_mus_variance = 10.0,
-  num_samples = 64,
-  enforce_mask = FALSE,
-  mask_space = "precision",
-  spd_eps = 1e-6,
-  num_iters = 120,
-  batch_size = 64,
+  num_samples = 64L,
+  data_precision_int = 1L,
+  likelihood_temp = 1.0,
+  rho_prec = 0.05,
+  rho_mu = 1.0,
+  elbo_eval_freq = 5L,
+  num_iters = 120L,
+  batch_size = 64L,
   early_stop = TRUE,
-  patience = 5
+  patience = 5L
 )
 
-pred_noprior <- result_noprior$model$predict(np$array(X_tgt, dtype = "float32"))
-yhat_noprior <- reticulate::py_to_r(pred_noprior[[1]])
-ari_noprior <- mclust::adjustedRandIndex(y_tgt, yhat_noprior)
-cat(sprintf("[TARGET] ARI without priors: %.3f\n", ari_noprior))
+ari_noprior <- mclust::adjustedRandIndex(y_tgt, fit_noprior$assignments_zero_based)
+cat(sprintf("Target ARI without priors: %.3f\n", ari_noprior))
 ```
 
-## Final comparison
+## Summary
 
 ```{r summary}
 cat("=== SUMMARY ===\n")
-cat(sprintf("ARI NGVI (with transferred priors): %.3f\n", ari_prior))
-cat(sprintf("ARI NGVI (no priors):             %.3f\n", ari_noprior))
-cat(sprintf("[TARGET] ARI QDA (source-trained, supervised): %.3f\n", ari_qda))
+cat(sprintf("Praxis-BGM with transferred priors: %.3f\n", ari_prior))
+cat(sprintf("Praxis-BGM without priors:         %.3f\n", ari_noprior))
+cat(sprintf("Source-trained QDA baseline:       %.3f\n", ari_qda))
 ```
 
-## Bayes factor feature selection
+## Bayes-factor feature selection
 
 ```{r bf-selection}
 bf_results <- praxis_bgm_bf_selection(
-  model = result_prior,
+  model = fit_prior,
   data = X_tgt,
-  top_n = 50,
-  visual = TRUE
+  top_n = 40L,
+  visual = FALSE
 )
 
+top_features <- bf_results$top_features
+bf_classification <- bf_results$classification
+causal_features <- seq_len(C)
+overlap_count <- length(intersect(top_features, causal_features))
 
-topf_py <- bf_results$top_features
+top_features[1:10]
+bf_classification
+cat("Top-40 overlap with causal features:", overlap_count, "\n")
+```
 
-# Force to numpy ndarray on Python side
-topf_np <- np$asarray(topf_py)
+## Notes
 
-# Convert to R
-topf_r <- py_to_r(topf_np)
-
-# Make sure it's a plain integer vector
-topf <- as.integer(as.vector(topf_r))
-
-print(topf)
-
-
-topf <- as.integer(unlist(topf))
-
-causal_features <- 0:(C - 1L)
-overlap_count <- length(intersect(topf, causal_features))
-cat("Top 40 overlap with causal features:", overlap_count, "\n")
+```{r notes, echo=FALSE}
+cat(
+  paste(
+    "- `fit_prior$assignments_zero_based` is used for exact comparison with the zero-based simulated labels.",
+    "- `praxis_bgm_bf_selection()` returns one-based feature indices in `top_features` for R users.",
+    "- The underlying BF scoring logic is still the Python Praxis-BGM implementation.",
+    sep = "\n"
+  )
+)
 ```
