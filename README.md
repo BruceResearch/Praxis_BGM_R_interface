@@ -1,7 +1,19 @@
 # Praxis-BGM R Interface
 
+High-dimensional omic data are typically measured on limited sample sizes, which
+challenges model-based clustering methods such as Gaussian mixture models, often
+leading to instability and poor generalization under complex mixture structures.
+To address these limitations, we developed Praxis-BGM, a natural-gradient
+variational inference framework for Gaussian mixture models that incorporates
+informative priors—cluster-specific means, covariances, and structural
+connectivity—from large-scale reference data with robust cluster structures to
+enable semi-supervised transfer learning on a small target dataset.
+
+![Praxis-BGM overview](./visual_abstract.png)
+
 This repository provides an R interface to the Python/JAX implementation of
-**Praxis-BGM** through [`reticulate`](https://rstudio.github.io/reticulate/).
+**Praxis-BGM** ([ContiLab-usc/Praxis-BGM](https://github.com/ContiLab-usc/Praxis-BGM))
+through [`reticulate`](https://rstudio.github.io/reticulate/).
 The interface has been updated to match the current Python package API and is
 now maintained from a single script:
 
@@ -156,12 +168,19 @@ The tutorial follows the updated wrapper rather than the older `R/` file layout.
 
 If you use Praxis-BGM in your research, please cite:
 
+> **Qiran Jia, Jesse A. Goodrich, David V. Conti.**
+> *Praxis-BGM: clustering of omics data using semi-supervised transfer learning for Gaussian mixture models via natural-gradient variational inference.*
+> Bioinformatics, 42(6):btag395, 2026. doi:10.1093/bioinformatics/btag395
+
 ```bibtex
-@article{jia2025praxisbgm,
-  title={Clustering of Omic Data Using Semi-Supervised Transfer Learning for Gaussian Mixture Models via Natural-Gradient Variational Inference},
+@article{jia2026praxisbgm,
+  title={Praxis-BGM: clustering of omics data using semi-supervised transfer learning for Gaussian mixture models via natural-gradient variational inference},
   author={Jia, Qiran and Goodrich, Jesse A. and Conti, David V.},
-  journal={bioRxiv},
-  year={2025},
-  doi={10.1101/2025.11.13.688299},
+  journal={Bioinformatics},
+  volume={42},
+  number={6},
+  pages={btag395},
+  year={2026},
+  doi={10.1093/bioinformatics/btag395}
 }
 ```
